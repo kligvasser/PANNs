@@ -1,3 +1,0 @@
-[submodule "augmentations"]
-	path = augmentations
-	url = https://github.com/kligvasser/torchaudio-augmentations/torchaudio-augmentations
