@@ -1,0 +1,30 @@
+name: audio
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - python=3.8.5
+  - pip=23.3
+  - cudatoolkit=11.8
+  - pip:
+    - torch
+    - torchvision
+    - torchaudio
+    - torchlibrosa
+    - opencv-python
+    - numpy
+    - imageio==2.9.0
+    - imageio-ffmpeg==0.4.2
+    - librosa
+    - pandas
+    - scipy
+    - tqdm
+    - tensorboard
+    - tensorboardX
+    - torch-tb-profiler
+    - seaborn
+    - scikit-learn
+    - transformers
+    - ipython
+    - black
+    - h5py

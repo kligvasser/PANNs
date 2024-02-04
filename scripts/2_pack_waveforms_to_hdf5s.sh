@@ -1,5 +1,5 @@
 #!/bin/bash
-DATASET_DIR=${1:-"./datasets/audioset201906"}   # Default first argument.
+DATASET_DIR=${1:-"/home/klig/datasets/audioset"}   # Default first argument.
 WORKSPACE=${2:-"./workspaces/audioset_tagging"}   # Default second argument.
 
 # Pack evaluation waveforms to a single hdf5 file
