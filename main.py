@@ -199,13 +199,13 @@ def train(args):
                     noise_root="/media/klig/disk/datasets/arabic-natural-audio",
                     sample_rate=sample_rate,
                     segment_size=sample_rate * 10,
-                    bank_size=128,
+                    bank_size=256,
                     snr_dbs_range=[20, 30],
                 ),
-                0.25,
+                0.2,
             ),
             RandomApply(RandomRIR(), 0.3),
-            RandomEncoder(sample_rate=sample_rate),
+            RandomApply(RandomEncoder(sample_rate=sample_rate), 0.5),
         ]
     )
 
@@ -276,6 +276,10 @@ def train(args):
         eps=1e-08,
         weight_decay=0.0,
         amsgrad=True,
+    )
+
+    scheduler = optim.lr_scheduler.StepLR(
+        optimizer, step_size=int(early_stop * 0.9), gamma=0.1
     )
 
     train_bgn_time = time.time()
@@ -416,6 +420,7 @@ def train(args):
 
         optimizer.step()
         optimizer.zero_grad()
+        scheduler.step()
 
         if iteration % 10 == 0:
             print(
