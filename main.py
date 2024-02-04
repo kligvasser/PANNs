@@ -37,6 +37,14 @@ from evaluate import Evaluator
 import utils.config
 from models.losses import get_loss_func
 
+from augmentations.augmentations import (
+    Compose,
+    RandomRIR,
+    RandomBackgroundNoise,
+    RandomEncoder,
+    RandomApply,
+)
+
 
 def train(args):
     """Train AudioSet tagging model.
@@ -62,6 +70,7 @@ def train(args):
 
     # Arugments & parameters
     workspace = args.workspace
+    data_root = args.data_root
     data_type = args.data_type
     sample_rate = args.sample_rate
     window_size = args.window_size
@@ -70,6 +79,7 @@ def train(args):
     fmin = args.fmin
     fmax = args.fmax
     model_type = args.model_type
+    pretrained_checkpoint_path = args.pretrained_checkpoint_path
     loss_type = args.loss_type
     balanced = args.balanced
     augmentation = args.augmentation
@@ -90,17 +100,17 @@ def train(args):
     loss_func = get_loss_func(loss_type)
 
     # Paths
-    black_list_csv = None
+    black_list_csv = "metadata/dcase2017task4.csv"  # None
 
     train_indexes_hdf5_path = os.path.join(
-        workspace, "hdf5s", "indexes", "{}.h5".format(data_type)
+        data_root, "hdf5s", "indexes", "{}.h5".format(data_type)
     )
 
     eval_bal_indexes_hdf5_path = os.path.join(
-        workspace, "hdf5s", "indexes", "balanced_train.h5"
+        data_root, "hdf5s", "indexes", "balanced_train.h5"
     )
 
-    eval_test_indexes_hdf5_path = os.path.join(workspace, "hdf5s", "indexes", "eval.h5")
+    eval_test_indexes_hdf5_path = os.path.join(data_root, "hdf5s", "indexes", "eval.h5")
 
     checkpoints_dir = os.path.join(
         workspace,
@@ -173,13 +183,33 @@ def train(args):
     )
 
     params_num = count_parameters(model)
-    # flops_num = count_flops(model, clip_samples)
     logging.info("Parameters num: {}".format(params_num))
-    # logging.info('Flops num: {:.3f} G'.format(flops_num / 1e9))
+
+    if pretrained_checkpoint_path:
+        logging.info("Load pretrained model from {}".format(pretrained_checkpoint_path))
+        checkpoint = torch.load(pretrained_checkpoint_path)
+        model.load_state_dict(checkpoint["model"])
 
     # Dataset will be used by DataLoader later. Dataset takes a meta as input
     # and return a waveform and a target.
-    dataset = AudioSetDataset(sample_rate=sample_rate)
+    transforms = Compose(
+        [
+            RandomApply(
+                RandomBackgroundNoise(
+                    noise_root="/media/klig/disk/datasets/arabic-natural-audio",
+                    sample_rate=sample_rate,
+                    segment_size=sample_rate * 10,
+                    bank_size=128,
+                    snr_dbs_range=[20, 30],
+                ),
+                0.25,
+            ),
+            RandomApply(RandomRIR(), 0.3),
+            RandomEncoder(sample_rate=sample_rate),
+        ]
+    )
+
+    dataset = AudioSetDataset(transforms=transforms)
 
     # Train sampler
     if balanced == "none":
@@ -407,7 +437,10 @@ if __name__ == "__main__":
     subparsers = parser.add_subparsers(dest="mode")
 
     parser_train = subparsers.add_parser("train")
-    parser_train.add_argument("--workspace", type=str, required=True)
+    parser_train.add_argument("--data-root", type=str, required=True)
+    parser_train.add_argument(
+        "--workspace", type=str, required=False, default="results/"
+    )
     parser_train.add_argument(
         "--data_type",
         type=str,
@@ -421,6 +454,7 @@ if __name__ == "__main__":
     parser_train.add_argument("--fmin", type=int, default=50)
     parser_train.add_argument("--fmax", type=int, default=14000)
     parser_train.add_argument("--model_type", type=str, required=True)
+    parser_train.add_argument("--pretrained_checkpoint_path", type=str, default="")
     parser_train.add_argument(
         "--loss_type", type=str, default="clip_bce", choices=["clip_bce"]
     )

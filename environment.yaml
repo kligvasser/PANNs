@@ -26,5 +26,8 @@ dependencies:
     - scikit-learn
     - transformers
     - ipython
+    - ipykernel
     - black
     - h5py
+    - julius
+    - torch-pitch-shift

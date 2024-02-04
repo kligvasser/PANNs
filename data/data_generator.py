@@ -18,10 +18,11 @@ def read_black_list(black_list_csv):
 
 
 class AudioSetDataset(object):
-    def __init__(self, sample_rate=None):
+    def __init__(self, transforms=None):
         """This class takes the meta of an audio clip as input, and return
         the waveform and target of the audio clip. This class is used by DataLoader.
         """
+        self.transforms = transforms
 
     def __getitem__(self, meta):
         """Load waveform and target of an audio clip.
@@ -42,8 +43,11 @@ class AudioSetDataset(object):
 
         with h5py.File(hdf5_path, "r") as hf:
             audio_name = hf["audio_name"][index_in_hdf5].decode()
-            waveform = int16_to_float32(hf["waveform"][index_in_hdf5])
             target = hf["target"][index_in_hdf5].astype(np.float32)
+
+            waveform = int16_to_float32(hf["waveform"][index_in_hdf5])
+            if self.transforms is not None:
+                waveform = self.transforms(waveform)
 
         data_dict = {"audio_name": audio_name, "waveform": waveform, "target": target}
 
