@@ -365,7 +365,7 @@ def train(args):
             train_bgn_time = time.time()
 
         # Save model
-        if iteration % 100000 == 0:
+        if iteration % 10000 == 0:
             checkpoint = {
                 "iteration": iteration,
                 "model": model.module.state_dict(),
@@ -416,16 +416,15 @@ def train(args):
 
         # Backward
         loss.backward()
-        print(loss)
 
         optimizer.step()
         optimizer.zero_grad()
         scheduler.step()
 
-        if iteration % 10 == 0:
+        if iteration % 100 == 0:
             print(
-                "--- Iteration: {}, train time: {:.3f} s / 10 iterations ---".format(
-                    iteration, time.time() - time1
+                "--- Iteration: {}, train time: {:.3f}, Loss {:.3f} ---".format(
+                    iteration, time.time() - time1, loss.item()
                 )
             )
             time1 = time.time()
