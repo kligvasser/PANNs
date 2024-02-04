@@ -68,7 +68,7 @@ def combine_full_indexes(args):
             name="target",
             shape=(0, classes_num),
             maxshape=(None, classes_num),
-            dtype=np.bool,
+            dtype=np.bool_,
         )
 
         full_hf.create_dataset(
