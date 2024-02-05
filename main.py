@@ -313,7 +313,7 @@ def train(args):
         iteration = 0
 
     # Parallel
-    print("GPU number: {}".format(torch.cuda.device_count()))
+    logging.info("GPU number: {}".format(torch.cuda.device_count()))
     model = torch.nn.DataParallel(model)
 
     if "cuda" in str(device):
@@ -422,8 +422,8 @@ def train(args):
         scheduler.step()
 
         if iteration % 100 == 0:
-            print(
-                "--- Iteration: {}, train time: {:.3f}, Loss {:.3f} ---".format(
+            logging.info(
+                "--- Iteration: {}, train time: {:.3f}, Loss {:.5f} ---".format(
                     iteration, time.time() - time1, loss.item()
                 )
             )
