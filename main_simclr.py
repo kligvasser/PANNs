@@ -164,7 +164,7 @@ def train(args):
     train_sampler = MultipleBalancedTrainSampler(
         indexes_hdf5_path=train_indexes_hdf5_path,
         batch_size=batch_size,
-        num_repeat=batch_size // 2,
+        num_repeat=batch_size // 4,
     )
 
     # Data loader
