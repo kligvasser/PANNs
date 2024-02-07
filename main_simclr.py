@@ -1,5 +1,4 @@
 import os
-import sys
 import numpy as np
 import argparse
 import time
@@ -15,35 +14,19 @@ from utils.utilities import (
     create_folder,
     get_filename,
     create_logging,
-    Mixup,
-    StatisticsContainer,
 )
 from models.models import *
 from utils.pytorch_utils import (
     move_data_to_device,
     count_parameters,
-    count_flops,
-    do_mixup,
 )
 from data.data_generator import (
-    AudioSetDataset,
-    TrainSampler,
-    BalancedTrainSampler,
-    AlternateTrainSampler,
-    EvaluateSampler,
+    AudioSetViewsDataset,
+    MultipleBalancedTrainSampler,
     collate_fn,
 )
-from evaluate import Evaluator
-import utils.config
-from models.losses import get_loss_func
-
-from augmentations.augmentations import (
-    Compose,
-    RandomRIR,
-    RandomBackgroundNoise,
-    RandomEncoder,
-    RandomApply,
-)
+from models.losses import info_nce_loss
+from augmentations.augmentations import *
 
 
 def train(args):
@@ -80,13 +63,13 @@ def train(args):
     fmax = args.fmax
     model_type = args.model_type
     pretrained_checkpoint_path = args.pretrained_checkpoint_path
-    loss_type = args.loss_type
-    balanced = args.balanced
-    augmentation = args.augmentation
+    num_views = args.num_views
     batch_size = args.batch_size
     learning_rate = args.learning_rate
     resume_iteration = args.resume_iteration
     early_stop = args.early_stop
+    classes_num = args.embedding_dim
+    temperature = args.temperature
     device = (
         torch.device("cuda")
         if args.cuda and torch.cuda.is_available()
@@ -95,69 +78,33 @@ def train(args):
     filename = args.filename
 
     num_workers = 8
-    clip_samples = utils.config.clip_samples
-    classes_num = utils.config.classes_num
-    loss_func = get_loss_func(loss_type)
 
     # Paths
-    black_list_csv = "metadata/dcase2017task4.csv"  # None
-
     train_indexes_hdf5_path = os.path.join(
         data_root, "hdf5s", "indexes", "{}.h5".format(data_type)
     )
-
-    eval_bal_indexes_hdf5_path = os.path.join(
-        data_root, "hdf5s", "indexes", "balanced_train.h5"
-    )
-
-    eval_test_indexes_hdf5_path = os.path.join(data_root, "hdf5s", "indexes", "eval.h5")
 
     checkpoints_dir = os.path.join(
         workspace,
         "checkpoints",
         filename,
-        "sample_rate={},window_size={},hop_size={},mel_bins={},fmin={},fmax={}".format(
+        "simclr,sample_rate={},window_size={},hop_size={},mel_bins={},fmin={},fmax={}".format(
             sample_rate, window_size, hop_size, mel_bins, fmin, fmax
         ),
         "data_type={}".format(data_type),
         model_type,
-        "loss_type={}".format(loss_type),
-        "balanced={}".format(balanced),
-        "augmentation={}".format(augmentation),
-        "batch_size={}".format(batch_size),
     )
     create_folder(checkpoints_dir)
-
-    statistics_path = os.path.join(
-        workspace,
-        "statistics",
-        filename,
-        "sample_rate={},window_size={},hop_size={},mel_bins={},fmin={},fmax={}".format(
-            sample_rate, window_size, hop_size, mel_bins, fmin, fmax
-        ),
-        "data_type={}".format(data_type),
-        model_type,
-        "loss_type={}".format(loss_type),
-        "balanced={}".format(balanced),
-        "augmentation={}".format(augmentation),
-        "batch_size={}".format(batch_size),
-        "statistics.pkl",
-    )
-    create_folder(os.path.dirname(statistics_path))
 
     logs_dir = os.path.join(
         workspace,
         "logs",
         filename,
-        "sample_rate={},window_size={},hop_size={},mel_bins={},fmin={},fmax={}".format(
+        "simclr,sample_rate={},window_size={},hop_size={},mel_bins={},fmin={},fmax={}".format(
             sample_rate, window_size, hop_size, mel_bins, fmin, fmax
         ),
         "data_type={}".format(data_type),
         model_type,
-        "loss_type={}".format(loss_type),
-        "balanced={}".format(balanced),
-        "augmentation={}".format(augmentation),
-        "batch_size={}".format(batch_size),
     )
 
     create_logging(logs_dir, filemode="w")
@@ -202,36 +149,22 @@ def train(args):
                     bank_size=256,
                     snr_dbs_range=[20, 30],
                 ),
-                0.2,
+                p=0.25,
             ),
-            RandomApply(RandomRIR(), 0.3),
-            RandomApply(RandomEncoder(sample_rate=sample_rate), 0.5),
+            RandomApply(Noise(), p=0.1),
+            RandomApply(RandomGain(), p=0.3),
+            RandomApply(RandomRIR(), p=0.5),
+            RandomApply(RandomEncoder(sample_rate=sample_rate), p=0.5),
         ]
     )
 
-    dataset = AudioSetDataset(transforms=transforms)
+    dataset = AudioSetViewsDataset(transforms=transforms, num_views=num_views)
 
     # Train sampler
-    if balanced == "none":
-        Sampler = TrainSampler
-    elif balanced == "balanced":
-        Sampler = BalancedTrainSampler
-    elif balanced == "alternate":
-        Sampler = AlternateTrainSampler
-
-    train_sampler = Sampler(
+    train_sampler = MultipleBalancedTrainSampler(
         indexes_hdf5_path=train_indexes_hdf5_path,
-        batch_size=batch_size * 2 if "mixup" in augmentation else batch_size,
-        black_list_csv=black_list_csv,
-    )
-
-    # Evaluate sampler
-    eval_bal_sampler = EvaluateSampler(
-        indexes_hdf5_path=eval_bal_indexes_hdf5_path, batch_size=batch_size
-    )
-
-    eval_test_sampler = EvaluateSampler(
-        indexes_hdf5_path=eval_test_indexes_hdf5_path, batch_size=batch_size
+        batch_size=batch_size,
+        num_repeat=batch_size // 2,
     )
 
     # Data loader
@@ -243,46 +176,16 @@ def train(args):
         pin_memory=True,
     )
 
-    eval_bal_loader = torch.utils.data.DataLoader(
-        dataset=dataset,
-        batch_sampler=eval_bal_sampler,
-        collate_fn=collate_fn,
-        num_workers=num_workers,
-        pin_memory=True,
-    )
-
-    eval_test_loader = torch.utils.data.DataLoader(
-        dataset=dataset,
-        batch_sampler=eval_test_sampler,
-        collate_fn=collate_fn,
-        num_workers=num_workers,
-        pin_memory=True,
-    )
-
-    if "mixup" in augmentation:
-        mixup_augmenter = Mixup(mixup_alpha=1.0)
-
-    # Evaluator
-    evaluator = Evaluator(model=model)
-
-    # Statistics
-    statistics_container = StatisticsContainer(statistics_path)
-
     # Optimizer
-    optimizer = optim.Adam(
+    optimizer = optim.AdamW(
         model.parameters(),
         lr=learning_rate,
-        betas=(0.9, 0.999),
-        eps=1e-08,
-        weight_decay=0.0,
-        amsgrad=True,
+        weight_decay=1e-4,
     )
 
     scheduler = optim.lr_scheduler.StepLR(
         optimizer, step_size=int(early_stop * 0.9), gamma=0.1
     )
-
-    train_bgn_time = time.time()
 
     # Resume training
     if resume_iteration > 0:
@@ -290,15 +193,11 @@ def train(args):
             workspace,
             "checkpoints",
             filename,
-            "sample_rate={},window_size={},hop_size={},mel_bins={},fmin={},fmax={}".format(
+            "simclr,sample_rate={},window_size={},hop_size={},mel_bins={},fmin={},fmax={}".format(
                 sample_rate, window_size, hop_size, mel_bins, fmin, fmax
             ),
             "data_type={}".format(data_type),
             model_type,
-            "loss_type={}".format(loss_type),
-            "balanced={}".format(balanced),
-            "augmentation={}".format(augmentation),
-            "batch_size={}".format(batch_size),
             "{}_iterations.pth".format(resume_iteration),
         )
 
@@ -306,7 +205,6 @@ def train(args):
         checkpoint = torch.load(resume_checkpoint_path)
         model.load_state_dict(checkpoint["model"])
         train_sampler.load_state_dict(checkpoint["sampler"])
-        statistics_container.load_state_dict(resume_iteration)
         iteration = checkpoint["iteration"]
 
     else:
@@ -319,6 +217,8 @@ def train(args):
     if "cuda" in str(device):
         model.to(device)
 
+    criterion = torch.nn.CrossEntropyLoss().to(device)
+
     time1 = time.time()
 
     for batch_data_dict in train_loader:
@@ -328,41 +228,6 @@ def train(args):
         'target': (batch_size [*2 if mixup], classes_num),
         (ifexist) 'mixup_lambda': (batch_size * 2,)}
         """
-
-        # Evaluate
-        if (iteration % 2000 == 0 and iteration > resume_iteration) or (iteration == 0):
-            train_fin_time = time.time()
-
-            bal_statistics = evaluator.evaluate(eval_bal_loader)
-            test_statistics = evaluator.evaluate(eval_test_loader)
-
-            logging.info(
-                "Validate bal mAP: {:.3f}".format(
-                    np.mean(bal_statistics["average_precision"])
-                )
-            )
-
-            logging.info(
-                "Validate test mAP: {:.3f}".format(
-                    np.mean(test_statistics["average_precision"])
-                )
-            )
-
-            statistics_container.append(iteration, bal_statistics, data_type="bal")
-            statistics_container.append(iteration, test_statistics, data_type="test")
-            statistics_container.dump()
-
-            train_time = train_fin_time - train_bgn_time
-            validate_time = time.time() - train_fin_time
-
-            logging.info(
-                "iteration: {}, train time: {:.3f} s, validate time: {:.3f} s"
-                "".format(iteration, train_time, validate_time)
-            )
-
-            logging.info("------------------------------------")
-
-            train_bgn_time = time.time()
 
         # Save model
         if iteration % 10000 == 0:
@@ -379,40 +244,21 @@ def train(args):
             torch.save(checkpoint, checkpoint_path)
             logging.info("Model saved to {}".format(checkpoint_path))
 
-        # Mixup lambda
-        if "mixup" in augmentation:
-            batch_data_dict["mixup_lambda"] = mixup_augmenter.get_lambda(
-                batch_size=len(batch_data_dict["waveform"])
-            )
-
-        # Move data to device
-        for key in batch_data_dict.keys():
-            batch_data_dict[key] = move_data_to_device(batch_data_dict[key], device)
-
         # Forward
         model.train()
 
-        if "mixup" in augmentation:
-            batch_output_dict = model(
-                batch_data_dict["waveform"], batch_data_dict["mixup_lambda"]
-            )
-            """{'clipwise_output': (batch_size, classes_num), ...}"""
+        waveforms = batch_data_dict["waveform"]
+        waveforms = np.split(waveforms, waveforms.shape[1], axis=1)
+        waveforms = np.concatenate(waveforms, axis=0).squeeze()
+        waveforms = move_data_to_device(waveforms, device)
 
-            batch_target_dict = {
-                "target": do_mixup(
-                    batch_data_dict["target"], batch_data_dict["mixup_lambda"]
-                )
-            }
-            """{'target': (batch_size, classes_num)}"""
-        else:
-            batch_output_dict = model(batch_data_dict["waveform"], None)
-            """{'clipwise_output': (batch_size, classes_num), ...}"""
-
-            batch_target_dict = {"target": batch_data_dict["target"]}
-            """{'target': (batch_size, classes_num)}"""
+        features = model(waveforms)["clipwise_output"]
 
         # Loss
-        loss = loss_func(batch_output_dict, batch_target_dict)
+        logits, labels = info_nce_loss(
+            features, n_views=num_views, temperature=temperature
+        )
+        loss = criterion(logits, labels)
 
         # Backward
         loss.backward()
@@ -452,27 +298,18 @@ if __name__ == "__main__":
         choices=["balanced_train", "full_train"],
     )
     parser_train.add_argument("--sample_rate", type=int, default=8000)
-    parser_train.add_argument("--window_size", type=int, default=1024)
-    parser_train.add_argument("--hop_size", type=int, default=320)
+    parser_train.add_argument("--window_size", type=int, default=256)
+    parser_train.add_argument("--hop_size", type=int, default=80)
     parser_train.add_argument("--mel_bins", type=int, default=64)
     parser_train.add_argument("--fmin", type=int, default=50)
-    parser_train.add_argument("--fmax", type=int, default=14000)
-    parser_train.add_argument("--model_type", type=str, required=True)
+    parser_train.add_argument("--fmax", type=int, default=4000)
+    parser_train.add_argument("--embedding_dim", type=int, default=512)
+    parser_train.add_argument("--model_type", type=str, default="Cnn14_SIMCLR_8k")
+    parser_train.add_argument("--num_views", type=int, default=2)
     parser_train.add_argument("--pretrained_checkpoint_path", type=str, default="")
-    parser_train.add_argument(
-        "--loss_type", type=str, default="clip_bce", choices=["clip_bce"]
-    )
-    parser_train.add_argument(
-        "--balanced",
-        type=str,
-        default="balanced",
-        choices=["none", "balanced", "alternate"],
-    )
-    parser_train.add_argument(
-        "--augmentation", type=str, default="mixup", choices=["none", "mixup"]
-    )
     parser_train.add_argument("--batch_size", type=int, default=32)
-    parser_train.add_argument("--learning_rate", type=float, default=1e-3)
+    parser_train.add_argument("--temperature", type=float, default=0.1)
+    parser_train.add_argument("--learning_rate", type=float, default=1e-4)
     parser_train.add_argument("--resume_iteration", type=int, default=0)
     parser_train.add_argument("--early_stop", type=int, default=1000000)
     parser_train.add_argument("--cuda", action="store_true", default=False)
