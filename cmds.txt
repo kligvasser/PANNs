@@ -61,3 +61,4 @@ python3 create_indexes.py combine_full_indexes --indexes_hdf5s_dir /home/klig/da
 
 ### train
 #python3 main.py train --data_type full_train --model_type Cnn14_8k --window_size 256 --hop_size 80 --mel_bins 64 --fmin 50 --fmax 4000 --pretrained_checkpoint_path /media/klig/disk/models-zoo/panns/Cnn14_8k_mAP=0.416.pth --data-root /home/klig/datasets/audioset/ --early_stop 20000 --batch_size 64 --cuda
+#python3 main_simclr.py train --data_type full_train --data-root /home/klig/datasets/audioset/ --early_stop 100000 --batch_size 32 --cuda

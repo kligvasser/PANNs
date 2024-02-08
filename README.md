@@ -245,3 +245,4 @@ If users came across out of memory error, then try to reduce the batch size.
 Other work on music transfer learning includes: <br>
 https://github.com/jordipons/sklearn-audio-transfer-learning <br>
 https://github.com/keunwoochoi/transfer_learning_music
+https://drive.google.com/drive/folders/1UCcj0YBtqHI5u-Ecu7feNKjSjBrY4h3J?usp=sharing
