@@ -37,13 +37,7 @@ from evaluate import Evaluator
 import utils.config
 from models.losses import get_loss_func
 
-from augmentations.augmentations import (
-    Compose,
-    RandomRIR,
-    RandomBackgroundNoise,
-    RandomEncoder,
-    RandomApply,
-)
+from augmentations.augmentations import *
 
 
 def train(args):
@@ -202,10 +196,12 @@ def train(args):
                     bank_size=256,
                     snr_dbs_range=[20, 30],
                 ),
-                0.2,
+                p=0.25,
             ),
-            RandomApply(RandomRIR(), 0.3),
-            RandomApply(RandomEncoder(sample_rate=sample_rate), 0.5),
+            RandomApply(Noise(), p=0.1),
+            RandomApply(RandomGain(), p=0.2),
+            RandomApply(RandomRIR(), p=0.5),
+            RandomApply(RandomEncoder(sample_rate=sample_rate), p=0.5),
         ]
     )
 
@@ -330,7 +326,7 @@ def train(args):
         """
 
         # Evaluate
-        if (iteration % 2000 == 0 and iteration > resume_iteration) or (iteration == 0):
+        if (iteration % 5000 == 0 and iteration > resume_iteration) or (iteration == 0):
             train_fin_time = time.time()
 
             bal_statistics = evaluator.evaluate(eval_bal_loader)
