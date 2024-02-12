@@ -188,17 +188,21 @@ def train(args):
     # and return a waveform and a target.
     transforms = Compose(
         [
+            RandomCropExpand(9 * sample_rate, 10 * sample_rate, pad_type="repeat"),
+            RandomApply(PolarityInversion(), 0.5),
+            Noise(min_snr=0.1, max_snr=0.2),
             RandomGain(),
-            Noise(min_snr=0.1, max_snr=0.3),
+            RandomApply(HighLowPass(sample_rate), p=0.5),
+            RandomApply(PitchShift(10 * sample_rate, sample_rate), p=0.5),
             RandomBackgroundNoise(
                 noise_root="/home/klig/datasets/arabic-natural-audio",
                 sample_rate=sample_rate,
                 segment_size=sample_rate * 10,
-                bank_size=1024,
-                snr_dbs_range=[5, 10],
+                bank_size=512,
+                snr_dbs_range=[7, 15],
             ),
-            RandomApply(RandomRIR(), p=0.8),
-            RandomApply(RandomEncoder(sample_rate=sample_rate), p=0.8),
+            RandomApply(RandomRIR(), p=0.5),
+            RandomApply(RandomEncoder(sample_rate=sample_rate), p=0.5),
         ]
     )
 
