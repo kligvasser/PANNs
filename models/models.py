@@ -3339,24 +3339,24 @@ class Cnn14_SIMCLR_8k(nn.Module):
             x = self.spec_augmenter(x)
 
         x = self.conv_block1(x, pool_size=(2, 2), pool_type="avg")
-        x = F.dropout(x, p=0.2, training=self.training)
+        # x = F.dropout(x, p=0.2, training=self.training)
         x = self.conv_block2(x, pool_size=(2, 2), pool_type="avg")
-        x = F.dropout(x, p=0.2, training=self.training)
+        # x = F.dropout(x, p=0.2, training=self.training)
         x = self.conv_block3(x, pool_size=(2, 2), pool_type="avg")
-        x = F.dropout(x, p=0.2, training=self.training)
+        # x = F.dropout(x, p=0.2, training=self.training)
         x = self.conv_block4(x, pool_size=(2, 2), pool_type="avg")
-        x = F.dropout(x, p=0.2, training=self.training)
+        # x = F.dropout(x, p=0.2, training=self.training)
         x = self.conv_block5(x, pool_size=(2, 2), pool_type="avg")
-        x = F.dropout(x, p=0.2, training=self.training)
+        # x = F.dropout(x, p=0.2, training=self.training)
         x = self.conv_block6(x, pool_size=(1, 1), pool_type="avg")
-        x = F.dropout(x, p=0.2, training=self.training)
-        
+        # x = F.dropout(x, p=0.2, training=self.training)
+
         x = torch.mean(x, dim=3)
         (x1, _) = torch.max(x, dim=2)
         x2 = torch.mean(x, dim=2)
         x = x1 + x2
-        
-        x = F.dropout(x, p=0.5, training=self.training)
+
+        # x = F.dropout(x, p=0.5, training=self.training)
         x = self.fc1(x)
         embedding = x
         x = self.fc3(F.relu_(self.fc2(F.relu_(x))))

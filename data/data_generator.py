@@ -341,6 +341,7 @@ class MultipleBalancedTrainSampler(Base):
         for k in range(self.classes_num):
             self.random_state.shuffle(self.indexes_per_class[k])
 
+        self.class_black_list = [327, 500, 513, 514, 515, 520, 521]
         self.queue = []
         self.pointers_of_classes = [0] * self.classes_num
 
@@ -368,6 +369,8 @@ class MultipleBalancedTrainSampler(Base):
                     self.queue = self.expand_queue(self.queue)
 
                 class_id = self.queue.pop(0)
+                if class_id in self.class_black_list:
+                    continue
                 j = 0
                 while i < batch_size and j < self.num_repeat:
                     pointer = self.pointers_of_classes[class_id]

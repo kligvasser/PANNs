@@ -141,20 +141,17 @@ def train(args):
     # and return a waveform and a target.
     transforms = Compose(
         [
-            RandomApply(
-                RandomBackgroundNoise(
-                    noise_root="/home/klig/datasets/arabic-natural-audio",
-                    sample_rate=sample_rate,
-                    segment_size=sample_rate * 10,
-                    bank_size=256,
-                    snr_dbs_range=[20, 30],
-                ),
-                p=0.25,
+            RandomGain(),
+            Noise(min_snr=0.1, max_snr=0.3),
+            RandomBackgroundNoise(
+                noise_root="/home/klig/datasets/arabic-natural-audio",
+                sample_rate=sample_rate,
+                segment_size=sample_rate * 10,
+                bank_size=1024,
+                snr_dbs_range=[5, 10],
             ),
-            RandomApply(Noise(), p=0.1),
-            RandomApply(RandomGain(), p=0.3),
-            RandomApply(RandomRIR(), p=0.5),
-            RandomApply(RandomEncoder(sample_rate=sample_rate), p=0.5),
+            RandomApply(RandomRIR(), p=0.8),
+            RandomApply(RandomEncoder(sample_rate=sample_rate), p=0.8),
         ]
     )
 
@@ -164,7 +161,7 @@ def train(args):
     train_sampler = MultipleBalancedTrainSampler(
         indexes_hdf5_path=train_indexes_hdf5_path,
         batch_size=batch_size,
-        num_repeat=batch_size // 4,
+        num_repeat=2,
     )
 
     # Data loader
