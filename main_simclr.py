@@ -145,7 +145,7 @@ def train(args):
             RandomApply(PolarityInversion(), 0.5),
             Noise(min_snr=0.1, max_snr=0.3),
             RandomGain(),
-            RandomApply(HighLowPass(sample_rate), p=0.5),
+            RandomApply(HighLowPass(sample_rate), p=0.8),
             RandomApply(PitchShift(10 * sample_rate, sample_rate), p=0.5),
             RandomBackgroundNoise(
                 noise_root="/home/klig/datasets/arabic-natural-audio",
