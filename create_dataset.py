@@ -92,9 +92,7 @@ def download_wavs(args):
         duration = end_time - start_time
 
         logging.info(
-            "{} {} start_time: {:.1f}, end_time: {:.1f}".format(
-                n, audio_id, start_time, end_time
-            )
+            "{} {} start_time: {:.1f}, end_time: {:.1f}".format(n, audio_id, start_time, end_time)
         )
 
         # Download full video of whatever format
@@ -130,9 +128,7 @@ def download_wavs(args):
 
             logging.info("Download and convert to {}".format(audio_path))
 
-    logging.info(
-        "Download finished! Time spent: {:.3f} s".format(time.time() - download_time)
-    )
+    logging.info("Download finished! Time spent: {:.3f} s".format(time.time() - download_time))
 
     logging.info("Logs can be viewed in {}".format(logs_dir))
 
@@ -162,9 +158,7 @@ def pack_waveforms_to_hdf5(args):
 
     create_folder(os.path.dirname(waveforms_hdf5_path))
 
-    logs_dir = "_logs/pack_waveforms_to_hdf5/{}{}".format(
-        prefix, get_filename(csv_path)
-    )
+    logs_dir = "_logs/pack_waveforms_to_hdf5/{}{}".format(prefix, get_filename(csv_path))
     create_folder(logs_dir)
     create_logging(logs_dir, filemode="w")
     logging.info("Write logs to {}".format(logs_dir))
@@ -182,11 +176,10 @@ def pack_waveforms_to_hdf5(args):
     # Pack waveform to hdf5
     total_time = time.time()
 
+    i = 0
     with h5py.File(waveforms_hdf5_path, "w") as hf:
         hf.create_dataset("audio_name", shape=((audios_num,)), dtype="S20")
-        hf.create_dataset(
-            "waveform", shape=((audios_num, clip_samples)), dtype=np.int16
-        )
+        hf.create_dataset("waveform", shape=((audios_num, clip_samples)), dtype=np.int16)
         hf.create_dataset("target", shape=((audios_num, classes_num)), dtype=np.bool_)
         hf.attrs.create("sample_rate", data=sample_rate, dtype=np.int32)
 
@@ -202,11 +195,24 @@ def pack_waveforms_to_hdf5(args):
 
                 audio = pad_or_truncate(audio, clip_samples)
 
-                hf["audio_name"][n] = meta_dict["audio_name"][n].encode()
-                hf["waveform"][n] = float32_to_int16(audio)
-                hf["target"][n] = meta_dict["target"][n]
+                hf["audio_name"][i] = meta_dict["audio_name"][n].encode()
+                hf["waveform"][i] = float32_to_int16(audio)
+                hf["target"][i] = meta_dict["target"][n]
+                i += 1
             else:
                 logging.info("{} File does not exist! {}".format(n, audio_path))
+
+        audio_names = hf["audio_name"][:i]
+        waveforms = hf["waveform"][:i]
+        targets = hf["target"][:i]
+
+        del hf["audio_name"]
+        del hf["waveform"]
+        del hf["target"]
+
+        hf.create_dataset("audio_name", data=audio_names)
+        hf.create_dataset("waveform", data=waveforms, dtype=np.int16)
+        hf.create_dataset("target", data=targets, dtype=np.bool_)
 
     logging.info("Write to {}".format(waveforms_hdf5_path))
     logging.info("Pack hdf5 time: {:.3f}".format(time.time() - total_time))
